@@ -1,0 +1,233 @@
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer, KNNImputer
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import confusion_matrix, accuracy_score, classification_report
+from sklearn.utils.class_weight import compute_class_weight
+from imblearn.over_sampling import SMOTE
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+df = pd.read_csv(r"C:\Users\siyag\Downloads\survey data\Customer-survey-data.csv")
+
+df.columns = ['Customer', 'Delivery_Experience', 'Food_Quality', 'Delivery_Speed', 'Order_Accurate']
+
+print(df.head())
+ Customer  Delivery_Experience  Food_Quality  Delivery_Speed Order_Accurate
+0         1                  5.0           3.0             4.0            Yes
+1         2                  3.0           4.0             3.0            Yes
+2         3                  4.0           5.0             2.0            Yes
+3         4                  5.0           3.0             4.0            Yes
+4         5                  2.0           5.0             1.0            Yes
+
+print(f"Dataset shape: {df.shape}")
+Dataset shape: (10616, 5)
+
+print(f"Missing values in each column:\n{df.isnull().sum()}")
+Missing values in each column:
+Customer                 0
+Delivery_Experience    418
+Food_Quality           252
+Delivery_Speed         239
+Order_Accurate         660
+dtype: int64
+
+# Define preprocessing steps
+numerical_features = ['Delivery_Experience', 'Food_Quality', 'Delivery_Speed']
+categorical_features = ['Order_Accurate']
+
+# Preprocessing for numerical data: impute missing values with median and standardize
+numerical_transformer = Pipeline(steps=[
+    ('imputer', SimpleImputer(strategy='median')),  # You could replace this with KNNImputer for better handling of missing values
+    ('scaler', StandardScaler())
+])
+
+# Preprocessing for categorical data: impute missing values and one-hot encode
+categorical_transformer = Pipeline(steps=[
+    ('imputer', SimpleImputer(strategy='most_frequent')),  # Consider KNNImputer for categorical variables if there's a lot of missing data
+    ('onehot', OneHotEncoder(handle_unknown='ignore'))
+])
+
+# Combine preprocessing steps
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('num', numerical_transformer, numerical_features),
+        ('cat', categorical_transformer, categorical_features)
+    ])
+
+print(f"Missing values in each column:\n{df.isnull().sum()}")
+
+Missing values in each column:
+Customer                 0
+Delivery_Experience    418
+Food_Quality           252
+Delivery_Speed         239
+Order_Accurate         660
+dtype: int64
+
+# Define the model
+model = Pipeline(steps=[
+    ('preprocessor', preprocessor),
+    ('classifier', LogisticRegression(random_state=42, class_weight='balanced'))  # Adding class_weight to handle imbalanced classes
+])
+
+# Simplifying the target variable (assuming satisfaction scores >= 4 as satisfied)
+df['Satisfaction'] = df['Delivery_Experience'].apply(lambda x: 1 if x >= 4 else 0 if pd.notnull(x) else np.nan)
+
+# Drop rows with missing target values
+df.dropna(subset=['Satisfaction'], inplace=True)
+
+# Split data into features and target
+X = df[['Delivery_Experience', 'Food_Quality', 'Delivery_Speed', 'Order_Accurate']]
+y = df['Satisfaction']
+
+# Split the data into train and test sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Define preprocessing steps: scaling and one-hot encoding
+numerical_features = ['Delivery_Experience', 'Food_Quality', 'Delivery_Speed']
+categorical_features = ['Order_Accurate']
+
+numerical_transformer = Pipeline(steps=[
+    ('imputer', SimpleImputer(strategy='median')),  # Impute missing values with median
+    ('scaler', StandardScaler())  # Standardize numerical data
+])
+
+categorical_transformer = Pipeline(steps=[
+    ('imputer', SimpleImputer(strategy='most_frequent')),  # Impute missing values with the most frequent value
+    ('onehot', OneHotEncoder(handle_unknown='ignore'))  # One-hot encode categorical features
+])
+
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('num', numerical_transformer, numerical_features),
+        ('cat', categorical_transformer, categorical_features)
+    ])
+
+# Apply the preprocessing pipeline to X_train and X_test
+X_train_preprocessed = preprocessor.fit_transform(X_train)
+X_test_preprocessed = preprocessor.transform(X_test)
+
+# Apply SMOTE to balance the training dataset
+smote = SMOTE(random_state=42)
+X_train_resampled, y_train_resampled = smote.fit_resample(X_train_preprocessed, y_train)
+
+# Define the model (logistic regression)
+model = LogisticRegression(random_state=42, class_weight='balanced')
+
+# Train the model using the resampled data
+model.fit(X_train_resampled, y_train_resampled)
+
+# Make predictions on the test set
+y_pred = model.predict(X_test_preprocessed)
+
+# Evaluate the model
+print(f"Accuracy: {accuracy_score(y_test, y_pred)}")
+print("Classification Report:")
+print(classification_report(y_test, y_pred))
+print("Confusion Matrix:")
+print(confusion_matrix(y_test, y_pred))
+
+# Evaluate the model
+print(f"Accuracy: {accuracy_score(y_test, y_pred)}")
+print("Classification Report:")
+print(classification_report(y_test, y_pred))
+print("Confusion Matrix:")
+print(confusion_matrix(y_test, y_pred))
+
+# 1. **Cross-validation to assess generalization**
+cv_scores = cross_val_score(model, X_train_resampled, y_train_resampled, cv=5)  # Use resampled training data
+print(f"Cross-validation scores: {cv_scores}")
+print(f"Mean CV score: {np.mean(cv_scores)}")
+
+Cross-validation scores: [1. 1. 1. 1. 1.]
+Mean CV score: 1.0
+
+# 2. **Plotting the confusion matrix for model performance**
+y_pred = model.predict(X_test_preprocessed)
+sns.heatmap(confusion_matrix(y_test, y_pred), annot=True, fmt='d', cmap='Blues', cbar=False)
+plt.title("Confusion Matrix")
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+plt.show()
+
+# 3. **Hyperparameter tuning using GridSearchCV**
+param_grid = {
+    'C': [0.01, 0.1, 1, 10, 100],  # Logistic Regression regularization parameter
+    'solver': ['liblinear', 'saga'],  # Solvers for logistic regression
+    'max_iter': [100, 200, 300]  # Maximum iterations for convergence
+}
+
+# Perform GridSearchCV with the resampled training data
+grid_search = GridSearchCV(model, param_grid, cv=5, scoring='accuracy')
+grid_search.fit(X_train_resampled, y_train_resampled)
+
+# Output the best hyperparameters from GridSearchCV
+print("Best parameters found by GridSearchCV:")
+print(grid_search.best_params_)
+Best parameters found by GridSearchCV:
+{'C': 0.01, 'max_iter': 100, 'solver': 'liblinear'}
+
+# Retrain the model using the best hyperparameters
+best_model = grid_search.best_estimator_
+
+# 4. **Evaluate the best model on the test set**
+y_pred_best = best_model.predict(X_test_preprocessed)
+print(f"Test Set Accuracy: {accuracy_score(y_test, y_pred_best)}")
+print("Best Model Classification Report:")
+print(classification_report(y_test, y_pred_best))
+Test Set Accuracy: 1.0
+Best Model Classification Report:
+              precision    recall  f1-score   support
+
+         0.0       1.00      1.00      1.00      1150
+         1.0       1.00      1.00      1.00       890
+
+    accuracy                           1.00      2040
+   macro avg       1.00      1.00      1.00      2040
+weighted avg       1.00      1.00      1.00      2040
+
+from sklearn.ensemble import RandomForestClassifier
+# Define the Random Forest Classifier
+rf_model = RandomForestClassifier(random_state=42, class_weight='balanced', n_jobs=-1)
+# Train the Random Forest model using the resampled data
+rf_model.fit(X_train_resampled, y_train_resampled)
+# 1. **Cross-validation to assess generalization**
+cv_scores = cross_val_score(rf_model, X_train_resampled, y_train_resampled, cv=5)  # Use resampled training data
+print(f"Random Forest Cross-validation scores: {cv_scores}")
+print(f"Mean CV score: {np.mean(cv_scores)}")
+Random Forest Cross-validation scores: [1. 1. 1. 1. 1.]
+Mean CV score: 1.0
+
+# 2. **Plotting the confusion matrix for model performance**
+y_pred_rf = rf_model.predict(X_test_preprocessed)
+sns.heatmap(confusion_matrix(y_test, y_pred_rf), annot=True, fmt='d', cmap='Blues', cbar=False)
+plt.title("Random Forest Confusion Matrix")
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+plt.show()
+
+# 3. **Classification Report for Random Forest**
+print("Random Forest Classification Report:")
+print(classification_report(y_test, y_pred_rf))
+Random Forest Classification Report:
+              precision    recall  f1-score   support
+
+         0.0       1.00      1.00      1.00      1150
+         1.0       1.00      1.00      1.00       890
+
+    accuracy                           1.00      2040
+   macro avg       1.00      1.00      1.00      2040
+weighted avg       1.00      1.00      1.00      2040
+
+# 4. **Compare Test Set Accuracy with Logistic Regression**
+test_accuracy_rf = accuracy_score(y_test, y_pred_rf)
+print(f"Test Set Accuracy (Random Forest): {test_accuracy_rf}")
+Test Set Accuracy (Random Forest): 1.0
+
+
+
