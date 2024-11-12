@@ -1,2 +1,10 @@
 .env
 **/__pycache__/
+
+
+
+surveydataprocessing/target/
+surveydataprocessing/dbt_packages/
+surveydataprocessing/logs/
+
+logs
