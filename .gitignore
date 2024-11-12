@@ -8,3 +8,5 @@ surveydataprocessing/dbt_packages/
 surveydataprocessing/logs/
 
 logs
+
+.DS_Store
